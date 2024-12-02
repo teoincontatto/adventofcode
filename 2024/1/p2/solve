@@ -1,0 +1,16 @@
+#!/bin/sh
+
+tr -s ' ' < input > input.trimmed
+cut -d ' ' -f 1 < input.trimmed > input.1
+cut -d ' ' -f 2 < input.trimmed > input.2
+N="$(grep -c . input.1)"
+I=0
+TOTAL=0
+while read ONE <&3
+do
+  COUNT="$(grep -cxF "$ONE" input.2)"
+  SCORE="$((ONE * COUNT))"
+  TOTAL="$((TOTAL + SCORE))"
+  I="$((I + 1))"
+done 3<input.1
+echo "$TOTAL"

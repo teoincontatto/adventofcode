@@ -1,0 +1,12 @@
+#!/bin/sh
+
+tr -s ' ' < input > input.trimmed
+cut -d ' ' -f 1 < input.trimmed | sort -n > input.1
+cut -d ' ' -f 2 < input.trimmed | sort -n > input.2
+TOTAL=0
+while read ONE <&3 && read TWO <&4
+do
+  SUM="$((ONE - TWO))"
+  TOTAL="$((TOTAL + ${SUM#-}))"
+done 3<input.1 4<input.2
+echo "$TOTAL"
