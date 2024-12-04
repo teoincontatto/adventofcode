@@ -1,0 +1,64 @@
+#!/bin/sh
+
+LENGTH="$(cat input | head -n 1 | tr -d '\n' | wc -m)"
+HEIGHT="$(cat input | wc -l)"
+
+xmas_count_line() {
+  local M="$1"
+  local INPUT_TRIMMED=input."$M".trimmed
+  local XMAS_COUNT=0
+  for N in $(seq 0 "$((LENGTH - 1))")
+  do
+    cat input | tail -n +"$((M + 1))" | tr -d '\n' > "$INPUT_TRIMMED"
+    XMAS_COUNT="$((XMAS_COUNT + $(cat "$INPUT_TRIMMED" \
+      | sed "s/^X.\{${LENGTH}\}M.\{${LENGTH}\}A.\{${LENGTH}\}S/\n/g" \
+      | wc -l) ))"
+    XMAS_COUNT="$((XMAS_COUNT + $(cat "$INPUT_TRIMMED" \
+      | sed "s/^S.\{${LENGTH}\}A.\{${LENGTH}\}M.\{${LENGTH}\}X/\n/g" \
+      | wc -l) ))"
+    XMAS_COUNT="$((XMAS_COUNT + $(cat "$INPUT_TRIMMED" \
+      | sed "s/^X.\{$((LENGTH + 1))\}M.\{$((LENGTH + 2))\}A.\{$((LENGTH + 3))\}S/\n/g" \
+      | wc -l) ))"
+    XMAS_COUNT="$((XMAS_COUNT + $(cat "$INPUT_TRIMMED" \
+      | sed "s/^.\{$((LENGTH + 3))\}X.\{$((LENGTH - 1))\}M.\{$((LENGTH - 1))\}A.\{$((LENGTH - 1))\}S/\n/g" \
+      | wc -l) ))"
+    XMAS_COUNT="$((XMAS_COUNT + $(cat "$INPUT_TRIMMED" \
+      | sed "s/^S.\{$((LENGTH + 1))\}A.\{$((LENGTH + 2))\}M.\{$((LENGTH + 3))\}X/\n/g" \
+      | wc -l) ))"
+    XMAS_COUNT="$((XMAS_COUNT + $(cat "$INPUT_TRIMMED" \
+      | sed "s/^.\{$((LENGTH + 3))\}S.\{$((LENGTH - 1))\}A.\{$((LENGTH - 1))\}M.\{$((LENGTH - 1))\}X/\n/g" \
+      | wc -l) ))"
+  done
+  if [ "$DEBUG" = true ]
+  then
+    echo "Line $((M + 1)) done" >&2
+  fi
+  echo "$XMAS_COUNT" > xmas_count."$M"
+}
+
+if [ "$#" -gt 0 ]
+then
+  "$@"
+  exit "$?"
+fi
+
+XMAS_COUNT="$(( $(cat input \
+  | tr -d '\n' \
+  | sed 's/XMAS/\n/g' \
+  | wc -l) ))"
+XMAS_COUNT="$((XMAS_COUNT + $(cat input \
+  | tr -d '\n' \
+  | sed 's/SAMX/\n/g' \
+  | wc -l) ))"
+seq 0 "$((HEIGHT - 1))" \
+  | xargs -I @M -P "${PARALLELISM:-$(getconf _NPROCESSORS_ONLN)}" env DEBUG="$DEBUG" sh $(printf %s "$-" | grep -q x && printf %s -x) solve xmas_count_line @M
+XMAS_COUNT="$((XMAS_COUNT + $(cat xmas_count.* \
+  | {
+    XMAS_COUNT=0
+    while read XMAS_COUNT_LINE
+    do
+      XMAS_COUNT="$((XMAS_COUNT+ XMAS_COUNT_LINE))"
+    done
+    echo "$XMAS_COUNT"
+    }) ))"
+echo "$XMAS_COUNT"

@@ -1,0 +1,5 @@
+#!/bin/sh
+
+EXPRESSION="$(grep -o 'mul(\([0-9-][0-9]*\),\([0-9-][0-9]*\))' input | tr '(,)' '*' | cut -d '*' -f 2,3 | tr '\n' '+' | sed 's/+$//')"
+
+eval "echo \"\$(($EXPRESSION))\""

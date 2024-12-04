@@ -1,0 +1,14 @@
+#!/bin/sh
+
+EXPRESSION="$(tr -d '\n' < input \
+  | sed "s/^/do()/" \
+  | sed "s/don't()/\n/g" \
+  | sed "s/\(do()\)/\n\1/g" \
+  | grep "^do()" \
+  | grep -o 'mul(\([0-9-][0-9]*\),\([0-9-][0-9]*\))' \
+  | tr '(,)' '*' \
+  | cut -d '*' -f 2,3 \
+  | tr '\n' '+' \
+  | sed 's/+$//')"
+
+eval "echo \"\$(($EXPRESSION))\""
