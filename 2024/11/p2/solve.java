@@ -7,8 +7,8 @@ import java.util.function.*;
 
 public class resolve {
 
-  static Map<Long, BigInteger> cache = new HasMap<>();
-  static Map<Long, List<Long>> stoneCache = new HasMap<>();
+  static final Map<Long, List<List<Long>>> stoneCache = Collections.synchronizedMap(new HashMap<>(Map.of(0L, new ArrayList<>(List.of(List.of(1L))))));
+  static final int cacheMaxBlinks = 15;
 
   public static void main(String[] args) throws Exception {
     final var input = Files.lines(Paths.get("input"))
@@ -18,58 +18,50 @@ public class resolve {
     List<Integer> blinks = new ArrayList<>();
     stones.add(initStones);
     blinks.add(Optional.of(args).filter(a -> a.length > 0).map(a -> Integer.parseInt(a[0])).orElse(25));
-    final int maxThreads = 1 << 3;
+    final int maxThreads = 1 << 0;
     final int stoneBatchSize = 1 << 16;
-    final int superblinks = 3;
     BigInteger[] count = new BigInteger[] { BigInteger.ZERO };
     int iterations = 0;
-    for (int superblink = 0; superblink < superblinks; superblink++) {
-    var nextStones = new ArrayList<List<Long>>();
-    for (Long stone : stones.stream().flatMap(List::stream).toList()) {
-    if (cache.containsKey(stone)) {
-      count[0] = count[0].add(cache.get(stone));
-      nextStones.add(stoneCache.get(stone));
-      continue;
-    }
-    stones = List.of(List.of(stone));
     while (!stones.isEmpty()) {
-      iterations++;
+      stoneCache.entrySet()
+	.forEach(e -> {
+	  while (e.getValue().size() < cacheMaxBlinks
+	      && e.getValue().getLast().stream().allMatch(stoneCache::containsKey)) {
+	    //System.out.println("expanding: " + e.getValue().getLast());
+	    //System.out.println("... to: " + e.getValue().getLast().stream().map(stoneCache::get).flatMap(List::stream).flatMap(List::stream).toList());
+	    e.getValue().add(e.getValue().getLast().stream().map(stoneCache::get).map(List::getFirst).flatMap(List::stream).toList());
+	  }
+	});
       final int threads = Math.min(maxThreads, stones.size());
       //System.out.println("stones: " + IntStream.range(0, threads).mapToObj(thread -> stones.get(thread).size() + " (" + blinks.get(thread) + ")").collect(Collectors.joining(" ")) + " levels " + stones.size() + " " + count[0] + " pending blinks range: " + blinks.stream().mapToInt(b -> b).min().orElse(0) + "-" + blinks.stream().mapToInt(b -> b).max().orElse(0) + " remaining: " + stones.stream().mapToLong(List::size).sum() + " threads: " + threads);
       final var newStones = IntStream.range(0, threads).mapToObj(thread -> new ArrayList<Long>(stones.get(thread).size() << 1)).toList();
+      final var newBlinks = IntStream.range(0, threads).mapToObj(thread -> new ArrayList<Integer>(1)).toList();
       IntStream.range(0, threads).mapToObj(thread -> CompletableFuture.runAsync(() -> {
-        if (stones.get(thread).size() > stoneBatchSize) {
-          blink(stones, newStones.get(thread), thread, thread, 0, stoneBatchSize - 1);
-        } else {
-          blink(stones, newStones.get(thread), thread, thread, 0, stones.get(thread).size() - 1);
-        }
+        blink(stones, newStones.get(thread), blinks.get(thread), newBlinks.get(thread), thread, thread, 0, Math.min(stoneBatchSize - 1, stones.get(thread).size() - 1));
       }))
           .toList()
           .forEach(CompletableFuture::join);
       IntStream.range(0, threads).forEach(thread -> {
       thread = threads - thread - 1;
-      //System.out.println("thread " + thread + " new stones: " + newStones.get(thread).stream().collect(Collectors.joining(" ")) + " (" + newStones.get(thread).size() + ")"); 
+      //System.out.println("thread " + thread + " new stones: " + newStones.get(thread).stream().map(Object::toString).collect(Collectors.joining(" ")) + " (" + newStones.get(thread).size() + "-" + newBlinks.get(thread).getFirst() + ")"); 
       if (stones.get(thread).size() > stoneBatchSize) {
 	stones.add(Math.min(stones.size(), threads), stones.get(thread).subList(stoneBatchSize, stones.get(thread).size()));
 	blinks.add(Math.min(blinks.size(), threads), blinks.get(thread));
       }
-      if (blinks.get(thread).intValue() == 1) {
+      //System.out.println("thread: " + thread + " blinks: " + blinks.get(thread) + " newBlinks: " + newBlinks.get(thread).getFirst());
+      if (newBlinks.get(thread).getFirst() == 0) {
         count[0] = count[0].add(BigInteger.valueOf((long) newStones.get(thread).size()));
-	nextStones.add(newStones.get(thread));
         stones.remove(thread);
 	blinks.remove(thread);
       } else {
         stones.set(thread, newStones.get(thread));
-        blinks.set(thread, blinks.get(thread) - 1);
+        blinks.set(thread, newBlinks.get(thread).getFirst());
       }
       });
-      if (!stones.isEmpty() && iterations % 50 == 0) {
-      System.out.println("[" + iterations + "] " + stones.get(0).size() + " (" + blinks.get(0) + ") levels " + stones.size() + " " + count[0] + " " + blinks.stream().mapToInt(b -> b).min().orElse(0) + "-" + blinks.stream().mapToInt(b -> b).max().orElse(0) + " " + stones.stream().mapToLong(List::size).sum());
+      if (!stones.isEmpty()) {
+        System.out.println("[" + iterations + "] " + newStones.get(0).size() + " (" + newBlinks.get(0).getFirst() + ") levels " + stones.size() + " " + count[0] + " " + blinks.stream().mapToInt(b -> b).min().orElse(0) + "-" + blinks.stream().mapToInt(b -> b).max().orElse(0) + " " + stones.stream().mapToLong(List::size).sum() + " " + stoneCache.size());
       }
-    }
-    stones = List.of(nextStones.stream().flatMap(List::stream).toList());
-    }
-    }
+      iterations++;
     }
     System.out.println("iterations: " + iterations);
     System.out.println(count[0]);
@@ -79,11 +71,17 @@ public class resolve {
 
   static void blink(
       List<List<Long>> stones,
-      List<Long> newStones,
+      List<Long> finalNewStones,
+      int blinks,
+      List<Integer> newBlinks,
       int firstLevelStart,
       int lastLevelEnd,
       int firstIndexStart,
       int lastIndexEnd) {
+    blink:
+    for (int blink = Math.min(Math.max(1, blinks), cacheMaxBlinks); blink >= 1; blink--) {
+    //System.out.println("try " + blink + " blinks");
+    var newStones = new ArrayList<Long>(stones.get(firstLevelStart).size() << 1);
     for (int level = firstLevelStart; level <= lastLevelEnd; level++) {
     final int startIndex;
     final int endIndex;
@@ -99,9 +97,15 @@ public class resolve {
     }
     for (int index = startIndex; index <= endIndex; index++) {
       var stone = stones.get(level).get(index);
-      if (stone.equals(0L)) {
-	newStones.add(1L);
+      var cachedStones = stoneCache.get(stone);
+      if (cachedStones != null && blink <= cachedStones.size()) {
+	//if (blink > 1) System.out.println("stone " + stone + " found in cache: " + cachedStones.get(blink - 1));
+        newStones.addAll(cachedStones.get(blink - 1));
 	continue;
+      }
+      if (blink != 1) {
+	//System.out.println("stone " + stone + " not found in cache");
+	continue blink;
       }
       String stoneText = stone.toString();
       if (stoneText.length() % 2 == 0) {
@@ -114,10 +118,16 @@ public class resolve {
 	//  newStones.add("0");
 	//}
 	newStones.add(Long.parseLong(right));
+	stoneCache.put(stone, new ArrayList<>(List.of(List.copyOf(newStones.subList(newStones.size() - 2, newStones.size())))));
 	continue;
       }
       newStones.add(stone * 2024L);
+      stoneCache.put(stone, new ArrayList<>(List.of(List.copyOf(newStones.subList(newStones.size() - 1, newStones.size())))));
     }
   }
-}
+  finalNewStones.addAll(newStones);
+  newBlinks.add(blinks - blink);
+  return;
+  }
+  }
 }
