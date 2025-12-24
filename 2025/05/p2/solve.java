@@ -14,52 +14,40 @@ public class solve {
         .filter(line -> line.contains("-"))
         .map(line -> line.split("-"))
         .map(range -> new BigInteger[] { new BigInteger(range[0]), new BigInteger(range[1]) })
+        .sorted(Comparator.comparing(range -> range[0]))
         .toList();
     final var reducedFreshRanges = freshRanges.stream()
         .reduce(
           new ArrayList<BigInteger[]>(),
           (result, range) -> {
-            boolean nested = false;
-            ArrayList<BigInteger[]> overlapping = new ArrayList<>();
-            for (var foundRange : result) {
+            System.out.println("Adding " + Arrays.asList(range));
+            boolean found = false;
+            for (var foundRange : result.stream().toList()) {
               if (inRange(range[0], foundRange) && inRange(range[1], foundRange)) {
-                System.out.println("Using " + Arrays.asList(foundRange) + " for " + Arrays.asList(range));
-                nested = true;
+                System.out.println("Using " + Arrays.asList(foundRange) + " skipping " + Arrays.asList(range));
+                found = true;
                 break;
               } else if (inRange(range[0], foundRange)) {
-                overlapping.add(foundRange);
+                foundRange[1] = range[1];
+                System.out.println("Changed " + Arrays.asList(foundRange) + " to accomodate end of " + Arrays.asList(range));
+                found = true;
+                range = foundRange;
               } else if (inRange(range[1], foundRange)) {
-                overlapping.add(foundRange);
+                foundRange[0] = range[0];
+                System.out.println("Changed " + Arrays.asList(foundRange) + " to accomodate begin of " + Arrays.asList(range));
+                if (found) {
+                  result.remove(range);
+                  System.out.println("Removed " + Arrays.asList(range));
+                }
+                found = true;
+                range = foundRange;
+              } else if (found) {
+                break;
               }
             }
-            if (!nested) {
-              if (overlapping.isEmpty()) {
-                System.out.println("New " + Arrays.asList(range));
-                result.add(range);
-              } else {
-                if (overlapping.size() > 2) {
-                  System.err.println("Found more than 2 overlapping for: " + Arrays.asList(range));
-                  overlapping.stream().map(Arrays::asList).forEach(System.err::println);
-                  System.exit(1);
-                }
-                if (overlapping.size() == 1) {
-                  if (inRange(range[0], overlapping.get(0))) {
-                    overlapping.get(0)[1] = range[1];
-                  } else {
-                    overlapping.get(0)[0] = range[0];
-                  }
-                  System.out.println("Change " + Arrays.asList(overlapping.get(0)));
-                } else {
-                  if (overlapping.get(0)[0].compareTo(overlapping.get(1)[0]) < 0) {
-                    overlapping.get(0)[1] = overlapping.get(1)[1];
-                  } else {
-                    overlapping.get(0)[0] = overlapping.get(1)[0];
-                  }
-                  result.remove(overlapping.get(1));
-                  System.out.println("Change " + Arrays.asList(overlapping.get(0)));
-                  System.out.println("Removed " + Arrays.asList(overlapping.get(1)));
-                }
-              }
+            if (!found) {
+              System.out.println("Added " + Arrays.asList(range));
+              result.add(range);
             }
             return result;
           },
